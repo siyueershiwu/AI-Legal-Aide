@@ -1,0 +1,90 @@
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.installed.cfg
+*.egg
+.pyc
+.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# ---------- Backend specific ----------
+backend/.env
+backend/.env.bak
+backend/.env.local
+backend/.env.*.local
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/htmlcov/
+backend/.coverage
+backend/coverage.xml
+
+# ---------- Node / Frontend ----------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+vue.what/dist/
+vue.what/dist-ssr/
+vue.what/.vite/
+vue.what/.nuxt/
+
+# Local env files
+.env
+.env.local
+.env.*.local
+
+# ---------- Project specific: 临时文件/测试残留 ----------
+picture/
+*.tmp
+*.bak
+~*
+
+# ---------- Claude Code 配置（不进 git） ----------
+.claude/
+
+# ---------- IDE / Editor ----------
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ---------- Logs ----------
+*.log
+logs/
+
+# ---------- Docker / Deploy ----------
+docker-compose.override.yml
+*.pid
+
+# ---------- OS ----------
+.DS_Store
+desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/
+
+# ---------- Alembic (use migrations/versions, not generated here) ----------
+# Keep migrations/ but ignore temp files
+backend/migrations/__pycache__/
+backend/migrations/versions/__pycache__/

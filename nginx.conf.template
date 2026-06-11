@@ -1,0 +1,102 @@
+# Nginx 反向代理 + HTTPS 模板
+#
+# 用法:
+#   1. 复制为 nginx.conf 并替换变量（或者用 envsubst 渲染）:
+#        cp nginx.conf.template nginx.conf
+#        sed -i "s|\${DOMAIN}|your-domain.com|g" nginx.conf
+#   2. 申请证书:
+#        certbot certonly --standalone -d your-domain.com
+#      证书会落在 /etc/letsencrypt/live/your-domain.com/
+#   3. 取消 docker-compose.yml 里 nginx 服务的注释
+#   4. docker compose up -d nginx
+#
+# 所有 ${...} 占位符必须替换为真实值才能启动。
+
+# 把 HTTP 强制跳到 HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN};
+
+    # certbot webroot 验证用，不要删
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name ${DOMAIN};
+
+    # ===== TLS 证书（certbot 路径） =====
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+
+    # ===== SSL 加固 =====
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    # ===== 安全响应头 =====
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    # CSP 由前端决定，这里只给个兜底
+    add_header Content-Security-Policy "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' wss: https:;" always;
+
+    # 上传文件大小（与 backend MAX_FILE_SIZE 一致，默认 10M）
+    client_max_body_size 10M;
+
+    # ===== 后端 API（含 SSE 流式） =====
+    location /api/ {
+        proxy_pass http://backend:8000;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # SSE 必须关闭缓冲 + 长超时
+        proxy_buffering    off;
+        proxy_cache        off;
+        proxy_read_timeout  300s;
+        proxy_send_timeout  300s;
+        # 禁用 proxy_set_header Connection "upgrade" 因为后端没 WS
+    }
+
+    # ===== 前端 =====
+    # 开发环境用 Vite dev server（带 HMR）。生产环境应改为 nginx 直接 serve 静态文件。
+    location / {
+        proxy_pass http://frontend:5173;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # ===== MinIO 控制台（生产建议改成内网访问或加 basic auth） =====
+    # 默认不暴露公网。如需远程管理，用 SSH 端口转发：
+    #   ssh -L 9001:localhost:9001 user@server
+    # 然后浏览器访问 http://localhost:9001
+    # 如果一定要在公网开，把下面两段取消注释并改成你自己的子域名 + basic auth。
+    # server {
+    #     listen 443 ssl;
+    #     server_name minio.${DOMAIN};
+    #     ssl_certificate     /etc/letsencrypt/live/minio.${DOMAIN}/fullchain.pem;
+    #     ssl_certificate_key /etc/letsencrypt/live/minio.${DOMAIN}/privkey.pem;
+    #     auth_basic "MinIO Console";
+    #     auth_basic_user_file /etc/nginx/.htpasswd;
+    #     location / {
+    #         proxy_pass http://minio:9001;
+    #     }
+    # }
+}

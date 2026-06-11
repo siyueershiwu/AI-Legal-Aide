@@ -1,0 +1,22 @@
+# 生产环境覆盖 - 用多阶段构建产物，不带 dev 工具
+# 使用: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# 前置：需先 docker build -t chat-frontend:latest ./vue.what（由 vue.what/Dockerfile.prod 构建）
+
+services:
+  backend:
+    command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --workers 2"]
+    # 隐藏 dev 端口
+    expose:
+      - "8000"
+
+  frontend:
+    image: chat-frontend:latest
+    container_name: chat-frontend
+    restart: unless-stopped
+    # 不再映射 5173 - 由 nginx 代理
+    expose:
+      - "80"
+    depends_on:
+      - backend
+    networks:
+      - chat-net
