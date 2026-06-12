@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional, Sequence
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.session import ChatSession
@@ -77,14 +77,6 @@ class SessionRepository:
             return False
         await self.db.delete(session)
         return True
-
-    async def count_messages(self, session_id: str) -> int:
-        from app.models.chat import ChatMessage  # 避免循环引用
-        stmt = select(func.count(ChatMessage.id)).where(
-            ChatMessage.session_id == session_id
-        )
-        result = await self.db.execute(stmt)
-        return int(result.scalar() or 0)
 
     async def list_by_user_with_count(
         self,

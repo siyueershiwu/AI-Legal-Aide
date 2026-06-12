@@ -5,10 +5,11 @@
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
-from typing import AsyncIterator
+from typing import AsyncIterator, List, Dict, Any
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -21,6 +22,7 @@ from app.db.session import AsyncSessionLocal
 from app.repositories.chat_repo import ChatRepository
 from app.repositories.session_repo import SessionRepository
 from app.schemas.chat import ChatStreamRequest
+from app.services.attachments import resolve_file_to_parts
 from app.services.doubao import doubao_service
 from app.services.redis_cache import RedisCache
 
@@ -132,7 +134,12 @@ async def chat_stream(
 
     # ===== 拿历史 + 调模型 =====
     history = await cache.get_cached_chat(session_id)
-    image_ids = req.file_ids or []
+    file_ids = req.file_ids or []
+
+    # 闭包：file_id → 多模态 content parts（image_url + text 混合）。
+    # 绑请求级 db session，stream_chat 内部用 asyncio.gather 并发解析。
+    async def _resolver(fid: str) -> List[Dict[str, Any]]:
+        return await resolve_file_to_parts(db, fid)
 
     # 闭包：BackgroundTask 读取（生成器在流式结束时 mutate）
     state: dict = {"final_answer": "", "error_msg": None}
@@ -142,37 +149,98 @@ async def chat_stream(
         tool_results_text = ""
         error_msg: str | None = None
 
+        # 第一帧告诉前端本次流归属哪个 session（首次提问时 session_id 是后端
+        # 新建的；前端记下后，后续提问必须带上这个 id，否则会重复开新对话）
+        yield _sse({"session_id": session_id, "content": "", "done": False})
+
+        # ---- 心跳 ----
+        # kb_search 触发的双轮 LLM 调用中间可能有 30s+ 完全静默（首轮
+        # tool_call + embed_query CPU 跑 + ChromaDB + 关联拉取），
+        # 这期间没有任何字节到达浏览器，前端 60s watchdog 会主动取消
+        # 连接 → 用户看到空白框。
+        # 修复：把 doubao 事件流和心跳都灌进同一个 asyncio.Queue，外层
+        # 生成器按到达顺序产出。心跳 SSE 注释行（":" 开头，SSE 规范约定的
+        # keep-alive，浏览器不解析但 eventsource-parser 拿到字节就会重置
+        # 前端 watchdog）。
+        _HEARTBEAT_INTERVAL = 15.0
+        _HB_LINE = ": ping\n\n"
+        _END = object()
+        _stream_q: asyncio.Queue = asyncio.Queue(maxsize=64)
+
+        async def _drain_doubao() -> None:
+            try:
+                async for ev in doubao_service.stream_chat(
+                    message=req.message,
+                    history=history,
+                    file_ids=file_ids,
+                    attachment_resolver=_resolver,
+                ):
+                    await _stream_q.put(("ev", ev))
+            except Exception as e:
+                await _stream_q.put(("err", e))
+            finally:
+                await _stream_q.put(("end", _END))
+
+        async def _heartbeat() -> None:
+            # 仅在还没产出可见 text 时发；之后真增量自己会重置前端 watchdog
+            while True:
+                await asyncio.sleep(_HEARTBEAT_INTERVAL)
+                if not full_content:
+                    try:
+                        await asyncio.sleep(0)  # 让出事件循环给 doubao 排程
+                        if not full_content:
+                            await _stream_q.put(("hb", _HB_LINE))
+                    except Exception:
+                        return
+
+        drainer = asyncio.create_task(_drain_doubao())
+        beater = asyncio.create_task(_heartbeat())
         try:
-            async for event in doubao_service.stream_chat(
-                message=req.message, history=history, image_ids=image_ids
-            ):
-                ev_type = event.get("type")
+            while True:
+                kind, payload = await _stream_q.get()
+                if kind == "end":
+                    break
+                if kind == "hb":
+                    yield payload
+                    continue
+                if kind == "err":
+                    raise payload
+
+                ev = payload
+                ev_type = ev.get("type")
 
                 if ev_type == "text":
-                    delta = event.get("delta", "")
+                    delta = ev.get("delta", "")
                     if not delta:
                         continue
                     full_content += delta
                     yield _sse({"content": delta, "done": False})
 
                 elif ev_type == "tool_call":
-                    name = event.get("name", "")
-                    yield _sse({"event": "tool_call", "name": name})
+                    name = ev.get("name", "")
+                    logger.info("Tool call: %s", name)
+                    # 不发送给前端
 
                 elif ev_type == "tool_result":
-                    name = event.get("name", "")
-                    result = event.get("result", {})
+                    name = ev.get("name", "")
+                    result = ev.get("result", {})
                     result_text = (
                         result.get("result", "") if isinstance(result, dict) else str(result)
                     )
                     tool_results_text += f"\n\n[{name}] {result_text}"
-                    yield _sse({"content": f"\n\n[{name}] {result_text}", "done": False})
+                    logger.info("Tool result: %s = %s", name, result_text[:200])
+                    # 不发送给前端
+
+                elif ev_type == "sources":
+                    sources = ev.get("sources", [])
+                    if sources:
+                        yield _sse({"event": "sources", "sources": sources})
 
                 elif ev_type == "done":
                     break
 
                 elif ev_type == "error":
-                    error_msg = event.get("message", "未知错误")
+                    error_msg = ev.get("message", "未知错误")
                     break
 
                 # 停止标记
@@ -185,6 +253,9 @@ async def chat_stream(
             error_msg = "AI 服务错误"
             # 异常路径立即释放 streaming 锁（不等 background task 走完）
             await cache.release_streaming(session_id)
+        finally:
+            drainer.cancel()
+            beater.cancel()
 
         final_answer = full_content + tool_results_text
         if error_msg and not final_answer:

@@ -5,11 +5,11 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Annotated
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from sqlalchemy import DateTime, func
 from sqlalchemy.dialects.mysql import CHAR
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, mapped_column
 
 # 通用列类型
 UUIDStrPK = Annotated[

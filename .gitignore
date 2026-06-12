@@ -40,10 +40,10 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-vue.what/dist/
-vue.what/dist-ssr/
-vue.what/.vite/
-vue.what/.nuxt/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.vite/
+frontend/.nuxt/
 
 # Local env files
 .env
@@ -62,7 +62,6 @@ picture/
 # ---------- IDE / Editor ----------
 .vscode/*
 !.vscode/extensions.json
-!.vscode/settings.json
 .idea/
 *.swp
 *.swo
@@ -88,3 +87,10 @@ $RECYCLE.BIN/
 # Keep migrations/ but ignore temp files
 backend/migrations/__pycache__/
 backend/migrations/versions/__pycache__/
+
+# ---------- RAG: 模型与向量库 + NPC 抓取缓存（首次启动自动下载/抓取，不进 git） ----------
+models/
+backend/data/chroma/
+backend/data/npc_laws/cache/
+*.bin
+*.safetensors

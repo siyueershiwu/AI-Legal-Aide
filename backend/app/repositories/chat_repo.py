@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional, Sequence
 
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chat import ChatMessage
@@ -83,20 +83,6 @@ class ChatRepository:
         stmt = delete(ChatMessage).where(ChatMessage.session_id == session_id)
         result = await self.db.execute(stmt)
         return result.rowcount
-
-    async def add_vote(self, chat_id: str, delta: int) -> bool:
-        """delta ∈ {-1, 1}（增/减）"""
-        if delta not in (-1, 1):
-            return False
-        column = ChatMessage.like_count if delta == 1 else ChatMessage.dislike_count
-        # 行级锁 + 不会跌破 0
-        stmt = (
-            update(ChatMessage)
-            .where(ChatMessage.id == chat_id, column > 0)
-            .values(**{column.name: column + delta})
-        )
-        result = await self.db.execute(stmt)
-        return result.rowcount > 0
 
     async def switch_vote(self, chat_id: str, target: int) -> bool:
         """直接置为 target ∈ {0, 1, -1}（覆盖式投票，前端不再担心状态机）"""

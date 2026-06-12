@@ -18,7 +18,7 @@ from minio import Minio
 from minio.error import S3Error
 
 from app.core.config import settings
-from app.core.exceptions import AppException, BadRequestError
+from app.core.exceptions import AppException
 
 logger = logging.getLogger(__name__)
 

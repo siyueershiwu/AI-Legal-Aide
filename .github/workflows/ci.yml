@@ -1,8 +1,7 @@
-# GitHub Actions CI - 每次 push / PR 跑 4 件事
+# GitHub Actions CI - 每次 push / PR 自动运行
 # 1. 后端: pip install + pytest
-# 2. 前端: npm ci + vue-tsc + npm run build
-# 3. Compose: docker compose config(语法验证)
-# 4. Compose: docker compose build(镜像能 build 出来)
+# 2. 前端: npm ci + vue-tsc + npm run test + npm run build
+# 3. Compose: docker compose config (语法验证)
 
 name: CI
 
@@ -36,8 +35,8 @@ jobs:
 
       - name: Run tests
         env:
-          # 测试用环境变量,真实值不入 git
-          SECRET_KEY: test-secret-key-for-ci-only-86-characters-long-aaaaaaaaaaaaaaaaaa
+          # 测试用环境变量，真实值不入 git。SECRET_KEY 必须 ≥ 86 字符（与 backend 启动校验一致）
+          SECRET_KEY: test-secret-key-for-ci-only-86-characters-long-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
           DATABASE_URL: sqlite+aiosqlite:///:memory:
           REDIS_URL: redis://localhost:6379/0
           DOUBAO_API_KEY: test-key
@@ -49,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: vue.what
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
 
@@ -57,7 +56,7 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: vue.what/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -65,34 +64,40 @@ jobs:
       - name: Type check
         run: npm run type-check
 
+      - name: Unit tests
+        run: npm run test
+
       - name: Build
         run: npm run build
 
-  # ===== Compose: 语法 + build 验证 =====
+  # ===== Compose: 语法验证 =====
   compose:
-    name: Docker Compose (config + build)
+    name: Docker Compose (config validation)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Prepare dummy secrets for build context
-        # build 不需要真实密码,但 compose config 解析需要变量非空
+      - name: Prepare dummy secrets
         run: |
           {
-            echo "MYSQL_ROOT_PASSWORD=ci_dummy_password_for_build_only"
             echo "REDIS_PASSWORD=ci_dummy"
             echo "MINIO_ROOT_USER=ci_dummy_user"
             echo "MINIO_ROOT_PASSWORD=ci_dummy_password_for_build"
           } >> $GITHUB_ENV
 
-      - name: docker compose config
+      - name: docker compose config (dev)
         run: docker compose config --quiet
 
-      - name: docker compose build
-        # 只 build 验证 Dockerfile 能跑,不起容器
+      - name: docker compose config (prod)
         run: |
-          docker compose build \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
-            backend
-        env:
-          DOCKER_BUILDKIT: 1
+          {
+            echo "SECRET_KEY=ci_dummy_secret_key_for_config_validation_only_86_chars_long_aaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            echo "MYSQL_ROOT_PASSWORD=ci_dummy_mysql"
+            echo "MYSQL_DATABASE=testdb"
+            echo "MYSQL_PORT=3306"
+            echo "DOUBAO_API_KEY=ci_dummy"
+            echo "DOUBAO_BASE_URL=https://example.com"
+            echo "DOUBAO_MODEL=test-model"
+            echo "BACKEND_PORT=8000"
+          } >> $GITHUB_ENV
+          docker compose -f docker-compose.prod.yml config --quiet

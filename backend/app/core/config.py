@@ -60,6 +60,32 @@ class Settings(BaseSettings):
     RATE_LIMIT_MAX_REQUESTS: int = 60
     RATE_LIMIT_WINDOW_SECONDS: int = 60
 
+    # ===== Third-party API =====
+    # Tavily Search (https://tavily.com)
+    TAVILY_API_KEY: str = ""
+    # 百度翻译 (https://api.fanyi.baidu.com)
+    BAIDU_APPID: str = ""
+    BAIDU_SECRET: str = ""
+
+    # ===== RAG / Vector Store =====
+    # ChromaDB 持久化目录（gitignored）
+    VECTOR_DB_PATH: str = "./data/chroma"
+    # 嵌入模型（HuggingFace model id，首次启动自动下载）
+    EMBEDDING_MODEL: str = "BAAI/bge-small-zh-v1.5"
+    EMBEDDING_DIM: int = 512
+    EMBEDDING_DEVICE: str = "cpu"  # cpu / cuda
+    EMBEDDING_BATCH_SIZE: int = 32
+    EMBEDDING_CACHE_DIR: str = "./models"  # HF 缓存（gitignored）
+    # 文本切分
+    CHUNK_SIZE: int = 500
+    CHUNK_OVERLAP: int = 50
+    # 检索
+    RETRIEVAL_TOP_K: int = 5
+    # 余弦距离阈值（= 1 - 相似度，越低越相似）。
+    # 口语 query 经改写后 top-k 距离通常落在 0.35-0.50；0.45 能在放行
+    # 多场景边缘 case 的同时把无关 query（top 距离 0.5+）拦在 top-k 之外。
+    RETRIEVAL_SCORE_THRESHOLD: float = 0.45
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def _split_csv(cls, v):

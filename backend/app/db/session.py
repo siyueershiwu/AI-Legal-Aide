@@ -19,6 +19,9 @@ engine = create_async_engine(
     pool_size=settings.DATABASE_POOL_SIZE,
     max_overflow=settings.DATABASE_MAX_OVERFLOW,
     pool_pre_ping=True,
+    # 30 分钟强制回收连接：MySQL 默认 wait_timeout=28800s，但云上 / 容器
+    # 经常配 60-300s 的 NAT 空闲超时；不回收客户端会拿到已 RST 的连接。
+    pool_recycle=1800,
     future=True,
 )
 

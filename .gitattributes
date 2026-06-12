@@ -1,0 +1,27 @@
+# Git attributes: https://git-scm.com/docs/gitattributes
+
+# Normalize line endings (Windows checkouts get CRLF, commits stay LF)
+* text=auto eol=lf
+
+# Force binary for image / font / archive formats
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.zip  binary
+*.gz   binary
+*.pdf  binary
+
+# Exclude secrets from source archives
+.gitignore          export-ignore
+.gitattributes      export-ignore
+.env                export-ignore
+.env.*              export-ignore
+backend/.env        export-ignore
+frontend/.env       export-ignore
+backend/.env.*      export-ignore
+.env.example.docker export-ignore

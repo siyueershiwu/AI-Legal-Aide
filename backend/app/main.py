@@ -89,8 +89,8 @@ async def root() -> dict:
     return {"message": f"{settings.APP_NAME} is running", "version": "2.0.0"}
 
 
-@app.get("/health")
-async def health() -> JSONResponse:
+@app.get("/healthz")
+async def healthz() -> JSONResponse:
     redis_ok = False
     try:
         redis_ok = bool(await redis_client.ping())

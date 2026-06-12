@@ -38,4 +38,9 @@ python-dotenv==1.0.1
 pytest==8.3.4
 pytest-asyncio==0.24.0
 pytest-cov==6.0.0
-httpx==0.28.1  # TestClient 内部依赖
+
+# ===== RAG / Vector Store =====
+# ChromaDB 文件级持久化 + 本地 bge-small-zh-v1.5 (中文 SOTA 轻量模型)
+# 首次启动自动从 HuggingFace 下载 ~100MB 到 EMBEDDING_CACHE_DIR
+chromadb==0.5.23
+sentence-transformers==3.3.1

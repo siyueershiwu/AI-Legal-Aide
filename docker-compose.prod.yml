@@ -1,22 +1,113 @@
-# 生产环境覆盖 - 用多阶段构建产物，不带 dev 工具
-# 使用: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-# 前置：需先 docker build -t chat-frontend:latest ./vue.what（由 vue.what/Dockerfile.prod 构建）
+# ===== 生产环境 =====
+# 启动: docker compose -f docker-compose.prod.yml up -d --build
+# 停止: docker compose -f docker-compose.prod.yml down
+#
+# MySQL 必须已在宿主机上安装并运行。
+# 容器通过 host.docker.internal 访问宿主机的 MySQL。
+#
+# 访问: http://localhost
 
 services:
-  backend:
-    command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --workers 2"]
-    # 隐藏 dev 端口
-    expose:
-      - "8000"
-
-  frontend:
-    image: chat-frontend:latest
-    container_name: chat-frontend
+  # ---- Redis ----
+  redis:
+    image: redis:7-alpine
+    container_name: what-prod-redis
     restart: unless-stopped
-    # 不再映射 5173 - 由 nginx 代理
-    expose:
-      - "80"
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?err}"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?err}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---- MinIO ----
+  minio:
+    image: minio/minio:latest
+    container_name: what-prod-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?err}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?err}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---- Backend (FastAPI) ----
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: what-backend:latest
+    container_name: what-prod-backend
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      SECRET_KEY: ${SECRET_KEY:?err}
+      DATABASE_URL: mysql+aiomysql://root:${MYSQL_ROOT_PASSWORD:?err}@host.docker.internal:${MYSQL_PORT:-3306}/${MYSQL_DATABASE:-whatdb}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?err}@redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?err}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?err}
+      MINIO_BUCKET: ${MINIO_BUCKET_NAME:-what}
+      MINIO_SECURE: "false"
+      DOUBAO_API_KEY: ${DOUBAO_API_KEY:?err}
+      DOUBAO_BASE_URL: ${DOUBAO_BASE_URL:-https://ark.cn-beijing.volces.com/api/v3}
+      DOUBAO_MODEL: ${DOUBAO_MODEL:-doubao-seed-2-0-pro-260215}
+      CORS_ORIGINS: '["*"]'
+      DEBUG: "false"
+      # ---- RAG ----
+      # 与 backend 容器内默认路径保持一致；volume 挂载可持久化
+      VECTOR_DB_PATH: /app/data/chroma
+      EMBEDDING_MODEL: BAAI/bge-small-zh-v1.5
+      EMBEDDING_DEVICE: cpu
+      EMBEDDING_CACHE_DIR: /app/models
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      # ChromaDB 持久化
+      - kb_data:/app/data
+      # 嵌入模型缓存（可选，Dockerfile 预热后已自带，volume 持久化首次联网下载的）
+      - kb_models:/app/models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ---- Frontend (Nginx + Vue) ----
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    image: what-frontend:latest
+    container_name: what-prod-frontend
+    restart: unless-stopped
     depends_on:
       - backend
-    networks:
-      - chat-net
+    ports:
+      - "80:80"
+
+volumes:
+  redis_data:
+  minio_data:
+  kb_data:    # ChromaDB 向量库持久化
+  kb_models:  # bge-small-zh 嵌入模型缓存
