@@ -37,8 +37,8 @@ jobs:
         env:
           # 测试用环境变量，真实值不入 git。SECRET_KEY 必须 ≥ 86 字符（与 backend 启动校验一致）
           SECRET_KEY: test-secret-key-for-ci-only-86-characters-long-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-          DATABASE_URL: sqlite+aiosqlite:///:memory:
-          REDIS_URL: redis://localhost:6379/0
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          REDIS_URL: "redis://localhost:6379/0"
           DOUBAO_API_KEY: test-key
         run: pytest -v --tb=short
 
