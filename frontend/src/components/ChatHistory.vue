@@ -130,7 +130,12 @@ watch(activeMenuId, (id) => {
     <div class="history-header">
       <h3>历史对话</h3>
       <button class="refresh-btn" @click="chat.loadSessions()" title="刷新">
-        <img src="/picture/123.png" alt="刷新" class="refresh-icon" />
+        <!-- 内联 SVG，避免外部 picture/ 资源依赖（该目录不进 git） -->
+        <svg class="refresh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="刷新">
+          <polyline points="23 4 23 10 17 10" />
+          <polyline points="1 20 1 14 7 14" />
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+        </svg>
       </button>
     </div>
     <div v-if="chat.sessions.length === 0" class="empty">

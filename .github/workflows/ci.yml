@@ -91,15 +91,14 @@ jobs:
         run: docker compose config
 
       - name: docker compose config (prod)
-        run: |
-          {
-            echo "SECRET_KEY=ci_dummy_secret_key_for_config_validation_only_86_chars_long_aaaaaaaaaaaaaaaaaaaaaaaaaaa"
-            echo "MYSQL_ROOT_PASSWORD=ci_dummy_mysql"
-            echo "MYSQL_DATABASE=testdb"
-            echo "MYSQL_PORT=3306"
-            echo "DOUBAO_API_KEY=ci_dummy"
-            echo "DOUBAO_BASE_URL=https://example.com"
-            echo "DOUBAO_MODEL=test-model"
-            echo "BACKEND_PORT=8000"
-          } >> $GITHUB_ENV
-          docker compose -f docker-compose.prod.yml config
+        env:
+          # 真实值不入 git。SECRET_KEY ≥ 86 字符（与 backend 启动校验一致）
+          SECRET_KEY: ci_dummy_secret_key_for_config_validation_only_86_chars_long_aaaaaaaaaaaaaaaaaaaaaaaaaaa
+          MYSQL_ROOT_PASSWORD: ci_dummy_mysql
+          MYSQL_DATABASE: testdb
+          MYSQL_PORT: "3306"
+          DOUBAO_API_KEY: ci_dummy
+          DOUBAO_BASE_URL: https://example.com
+          DOUBAO_MODEL: test-model
+          BACKEND_PORT: "8000"
+        run: docker compose -f docker-compose.prod.yml config

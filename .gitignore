@@ -89,7 +89,9 @@ backend/migrations/__pycache__/
 backend/migrations/versions/__pycache__/
 
 # ---------- RAG: 模型与向量库 + NPC 抓取缓存（首次启动自动下载/抓取，不进 git） ----------
-models/
+# 注意：必须用 /models/ 锚定到根目录，否则会误伤 backend/app/models/ ORM 包
+/models/
+backend/models/
 backend/data/chroma/
 backend/data/npc_laws/cache/
 *.bin

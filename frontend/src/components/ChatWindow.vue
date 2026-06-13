@@ -82,7 +82,7 @@ function snippetText(s: KnowledgeSource, expanded: boolean): string {
       :class="{ user: msg.role === 'user', assistant: msg.role === 'assistant' }"
     >
       <div class="avatar">
-        <img v-if="msg.role === 'assistant'" src="/picture/touxiang.jpg" class="avatar-img" alt="AI" />
+        <span v-if="msg.role === 'assistant'" class="ai-avatar" title="AI 律师助手">AI</span>
         <span v-else class="user-avatar">{{ (msg.role === 'user' ? 'U' : 'A') }}</span>
       </div>
       <div class="content-wrapper">
@@ -196,11 +196,17 @@ function snippetText(s: KnowledgeSource, expanded: boolean): string {
   box-shadow: var(--shadow-sm);
 }
 
-.avatar-img {
+.ai-avatar {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gradient-ai, var(--gradient-user));
+  color: white;
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.5px;
 }
 
 .user-avatar {
